@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
-import { FiUserPlus, FiSearch, FiEdit2, FiTrash2 } from "react-icons/fi";
 import { api } from "../services/api";
-import { toast } from "react-toastify";
 import UserModal from "./UserModal";
+import { FiEdit2, FiTrash2, FiUserPlus, FiDownload } from "react-icons/fi";
+import { toast } from "react-toastify";
+import ConfirmationDialog from "./ConfirmationDialog";
+import * as XLSX from "xlsx";
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
@@ -16,90 +18,54 @@ const UserManagement = () => {
   });
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
-
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortConfig, setSortConfig] = useState({
-    key: "name",
-    direction: "asc",
-  });
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [roleFilter, setRoleFilter] = useState("all");
+  const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [usersPerPage] = useState(10);
+  const [selectedUsers, setSelectedUsers] = useState([]);
 
   useEffect(() => {
-    fetchUsers();
-    fetchRoles();
+    fetchUsersAndRoles();
   }, []);
 
-  const fetchUsers = async () => {
+  const fetchUsersAndRoles = async () => {
     try {
-      const data = await api.getUsers();
-      setUsers(data);
+      const [usersData, rolesData] = await Promise.all([api.getUsers(), api.getRoles()]);
+      setUsers(usersData);
+      setRoles(rolesData);
     } catch (error) {
-      console.error("Error fetching users:", error);
+      console.error("Error fetching data:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchRoles = async () => {
-    try {
-      const data = await api.getRoles();
-      setRoles(data);
-      if (data.length > 0) {
-        setCurrentUser((prev) => ({ ...prev, role: data[0].name }));
-      }
-    } catch (error) {
-      console.error("Error fetching roles:", error);
-    }
-  };
-
-  const handleAddNew = () => {
-    setCurrentUser({
-      name: "",
-      email: "",
-      role: "User",
-      status: "active",
-    });
-    setIsEditing(false);
-    setShowModal(true);
-  };
-
-  const handleEdit = (user) => {
-    setCurrentUser(user);
-    setIsEditing(true);
-    setShowModal(true);
-  };
-
-  const filteredAndSortedUsers = useMemo(() => {
-    let filtered = [...users];
+  const filteredUsers = useMemo(() => {
+    let filtered = users;
 
     if (searchTerm) {
-      filtered = filtered.filter(
-        (user) =>
-          user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          user.email.toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter((user) =>
+        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((user) => user.status === statusFilter);
+    if (sortConfig.key) {
+      filtered = filtered.sort((a, b) => {
+        if (a[sortConfig.key] < b[sortConfig.key]) {
+          return sortConfig.direction === "asc" ? -1 : 1;
+        }
+        if (a[sortConfig.key] > b[sortConfig.key]) {
+          return sortConfig.direction === "asc" ? 1 : -1;
+        }
+        return 0;
+      });
     }
-
-    if (roleFilter !== "all") {
-      filtered = filtered.filter((user) => user.role === roleFilter);
-    }
-
-    filtered.sort((a, b) => {
-      const aValue = a[sortConfig.key].toLowerCase();
-      const bValue = b[sortConfig.key].toLowerCase();
-
-      if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
-      if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
-      return 0;
-    });
 
     return filtered;
-  }, [users, searchTerm, sortConfig, statusFilter, roleFilter]);
+  }, [users, searchTerm, sortConfig]);
 
   const handleSort = (key) => {
     setSortConfig({
@@ -128,145 +94,198 @@ const UserManagement = () => {
       }
       setShowModal(false);
     } catch (error) {
-      const axiosError = error;
-      console.error("Error saving user:", axiosError.message);
-      toast.error(axiosError.message);
+      console.error("Error saving user:", error);
+      toast.error("Error saving user");
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async () => {
     try {
-      await api.deleteUser(id);
-      setUsers(users.filter((user) => user._id !== id));
+      await api.deleteUser(userToDelete._id);
+      setUsers(users.filter((user) => user._id !== userToDelete._id));
       toast.success("User deleted successfully!");
+      setShowConfirmation(false);
+      setUserToDelete(null);
     } catch (error) {
-      if (error instanceof Error) {
-        toast.error(error.message);
-      } else {
-        toast.error("An unexpected error occurred while deleting the user");
-      }
+      console.error("Error deleting user:", error);
+      toast.error("Error deleting user");
     }
   };
+
+  const handleAddNew = () => {
+    setCurrentUser({ name: "", email: "", role: "User", status: "active" });
+    setIsEditing(false);
+    setShowModal(true);
+  };
+
+  const handleEdit = (user) => {
+    setCurrentUser(user);
+    setIsEditing(true);
+    setShowModal(true);
+  };
+
+  const handleConfirmDelete = (user) => {
+    setUserToDelete(user);
+    setShowConfirmation(true);
+  };
+
+  const handleSelectUser = (userId) => {
+    setSelectedUsers((prevSelectedUsers) =>
+      prevSelectedUsers.includes(userId)
+        ? prevSelectedUsers.filter((id) => id !== userId)
+        : [...prevSelectedUsers, userId]
+    );
+  };
+
+  const handleBatchDelete = async () => {
+    try {
+      await Promise.all(selectedUsers.map((userId) => api.deleteUser(userId)));
+      setUsers(users.filter((user) => !selectedUsers.includes(user._id)));
+      toast.success("Selected users deleted successfully!");
+      setSelectedUsers([]);
+    } catch (error) {
+      console.error("Error deleting users:", error);
+      toast.error("Error deleting users");
+    }
+  };
+
+  const handleExport = () => {
+    const ws = XLSX.utils.json_to_sheet(users);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Users");
+    XLSX.writeFile(wb, "users.xlsx", { bookType: "xlsx", type: "binary" });
+  };
+
+  const indexOfLastUser = currentPage * usersPerPage;
+  const indexOfFirstUser = indexOfLastUser - usersPerPage;
+  const currentUsers = filteredUsers.slice(indexOfFirstUser, indexOfLastUser);
+
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen p-6">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="loader"></div>
       </div>
     );
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <div></div>
-        <button
-          onClick={handleAddNew}
-          className="inline-flex items-center px-4 py-2 bg-blue-500 hover:bg-blue-600
-                        text-white rounded-lg transition-colors duration-200 ease-in-out
-                        shadow-sm hover:shadow-md w-full sm:w-auto justify-center"
-        >
-          <FiUserPlus className="mr-2" />
-          Add New User
-        </button>
-      </div>
-
-      <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search users..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+    <div className="container mx-auto p-4 mt-16">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold">User Management</h2>
+        <div className="flex space-x-2">
+          <button
+            className="flex items-center px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            onClick={handleAddNew}
+          >
+            <FiUserPlus className="mr-2" />
+            Add New User
+          </button>
+          {selectedUsers.length > 0 && (
+            <button
+              className="flex items-center px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+              onClick={handleBatchDelete}
+            >
+              <FiTrash2 className="mr-2" />
+              Delete Selected
+            </button>
+          )}
+          <button
+            className="flex items-center px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+            onClick={handleExport}
+          >
+            <FiDownload className="mr-2" />
+            Export to Excel
+          </button>
         </div>
-
-        <select
-          value={statusFilter}
-          onChange={(e) =>
-            setStatusFilter(e.target.value)
-          }
-          className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">All</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
-
-        <select
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-          className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">All</option>
-          {roles.map((role) => (
-            <option key={role._id} value={role.name}>
-              {role.name}
-            </option>
-          ))}
-        </select>
       </div>
 
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
+      <div className="flex flex-col md:flex-row md:space-x-4 mb-4">
+        <input
+          type="text"
+          placeholder="Search by name or email"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="p-2 border rounded mb-2 md:mb-0"
+        />
+      </div>
+
+      <div className="bg-white shadow-md rounded-lg overflow-hidden">
+        <table className="min-w-full">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <input
+                  type="checkbox"
+                  onChange={(e) =>
+                    setSelectedUsers(
+                      e.target.checked ? currentUsers.map((user) => user._id) : []
+                    )
+                  }
+                  checked={selectedUsers.length === currentUsers.length}
+                />
+              </th>
               <th
-                scope="col"
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                onClick={() => handleSort("name")}
               >
                 Name
               </th>
               <th
-                scope="col"
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                onClick={() => handleSort("email")}
               >
                 Email
               </th>
               <th
-                scope="col"
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                onClick={() => handleSort("role")}
               >
                 Role
               </th>
               <th
-                scope="col"
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                onClick={() => handleSort("status")}
               >
                 Status
               </th>
-              <th scope="col" className="relative px-6 py-3">
-                <span className="sr-only">Edit</span>
+              <th
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                onClick={() => handleSort("createdAt")}
+              >
+                Created At
+              </th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
               </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {filteredAndSortedUsers.map((user) => (
+            {currentUsers.map((user) => (
               <tr key={user._id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {user.name}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={selectedUsers.includes(user._id)}
+                    onChange={() => handleSelectUser(user._id)}
+                  />
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {user.email}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {user.role}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {user.status}
-                </td>
+                <td className="px-6 py-4 whitespace-nowrap">{user.name}</td>
+                <td className="px-6 py-4 whitespace-nowrap">{user.email}</td>
+                <td className="px-6 py-4 whitespace-nowrap">{user.role}</td>
+                <td className="px-6 py-4 whitespace-nowrap">{user.status}</td>
+                <td className="px-6 py-4 whitespace-nowrap">{new Date(user.createdAt).toLocaleDateString()}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <button
+                    className="text-blue-600 hover:text-blue-900 mr-2"
                     onClick={() => handleEdit(user)}
-                    className="text-indigo-600 hover:text-indigo-900 mr-4"
                   >
                     <FiEdit2 />
                   </button>
                   <button
-                    onClick={() => handleDelete(user._id)}
                     className="text-red-600 hover:text-red-900"
+                    onClick={() => handleConfirmDelete(user)}
                   >
                     <FiTrash2 />
                   </button>
@@ -277,11 +296,22 @@ const UserManagement = () => {
         </table>
       </div>
 
-      {filteredAndSortedUsers.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-gray-500">No users found.</p>
-        </div>
-      )}
+      <div className="flex justify-center mt-4">
+        <nav>
+          <ul className="flex list-none">
+            {Array.from({ length: Math.ceil(filteredUsers.length / usersPerPage) }, (_, i) => (
+              <li key={i} className="mx-1">
+                <button
+                  onClick={() => paginate(i + 1)}
+                  className={`px-3 py-1 rounded ${currentPage === i + 1 ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
+                >
+                  {i + 1}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </div>
 
       <UserModal
         showModal={showModal}
@@ -290,6 +320,14 @@ const UserManagement = () => {
         isEditing={isEditing}
         onClose={() => setShowModal(false)}
         onSave={handleSave}
+      />
+
+      <ConfirmationDialog
+        show={showConfirmation}
+        title="Delete User"
+        message="Are you sure you want to delete this user?"
+        onConfirm={handleDelete}
+        onCancel={() => setShowConfirmation(false)}
       />
     </div>
   );

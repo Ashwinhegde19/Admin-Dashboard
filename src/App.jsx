@@ -4,14 +4,14 @@ import Dashboard from "./components/Dashboard";
 import UserManagement from "./components/UserManagement";
 import RoleManagement from "./components/RoleManagement";
 import { ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import 'react-toastify/dist/ReactToastify.css';
 
-function App() {
+const App = () => {
   return (
     <BrowserRouter>
       <ToastContainer
         position="top-right"
-        autoClose={3000}
+        autoClose={5000}
         hideProgressBar={false}
         newestOnTop
         closeOnClick
@@ -30,6 +30,6 @@ function App() {
       </Routes>
     </BrowserRouter>
   );
-}
+};
 
 export default App;

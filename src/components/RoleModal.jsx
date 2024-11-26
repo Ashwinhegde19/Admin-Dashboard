@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 const RoleModal = ({
   showModal,
   role,
@@ -5,45 +7,79 @@ const RoleModal = ({
   onClose,
   onSave,
   onRoleChange,
+  onDescriptionChange,
   onPermissionToggle,
 }) => {
-  if (!showModal) return null;
+  useEffect(() => {
+    if (showModal) {
+      // Reset form or perform any necessary actions when modal is shown
+    }
+  }, [showModal]);
+
+  const permissions = ["read", "write", "delete"];
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave(role);
+  };
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
-      <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-        <div className="mt-3">
-          <h3 className="text-lg leading-6 font-medium text-gray-900 text-center">
-            {isEditing ? "Edit Role" : "Add New Role"}
-          </h3>
-          <div className="mt-2 px-7 py-3">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center ${showModal ? 'block' : 'hidden'}`}>
+      <div className="fixed inset-0 bg-black bg-opacity-50" onClick={onClose}></div>
+      <div className="bg-white rounded-lg shadow-lg w-full max-w-md z-10">
+        <div className="p-4 border-b">
+          <h2 className="text-xl font-bold">{isEditing ? "Edit Role" : "Create Role"}</h2>
+        </div>
+        <form onSubmit={handleSubmit} className="p-4">
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Role Name</label>
             <input
               type="text"
-              placeholder="Role Name"
-              className="mt-2 p-2 w-full border rounded"
               value={role.name}
               onChange={(e) => onRoleChange(e.target.value)}
-              disabled={isEditing}
+              className="w-full p-2 border rounded"
             />
-            <div className="mt-4">
-              {/* Add permissions toggle UI here */}
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Description</label>
+            <textarea
+              value={role.description}
+              onChange={(e) => onDescriptionChange(e.target.value)}
+              className="w-full p-2 border rounded"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Permissions</label>
+            <div className="space-y-2">
+              {permissions.map((permission) => (
+                <label key={permission} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={role.permissions.includes(permission)}
+                    onChange={() => onPermissionToggle(permission)}
+                    className="mr-2"
+                  />
+                  {permission.charAt(0).toUpperCase() + permission.slice(1)}
+                </label>
+              ))}
             </div>
           </div>
-          <div className="items-center px-4 py-3 text-center">
+          <div className="flex justify-end space-x-2">
             <button
-              onClick={onSave}
-              className="px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300"
-            >
-              {isEditing ? "Update Role" : "Create Role"}
-            </button>
-            <button
+              type="button"
               onClick={onClose}
-              className="ml-4 px-4 py-2 bg-gray-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-300"
+              className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
             >
               Cancel
             </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              {isEditing ? "Update Role" : "Create Role"}
+            </button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );
