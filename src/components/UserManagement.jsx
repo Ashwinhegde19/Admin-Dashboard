@@ -5,6 +5,8 @@ import { FiEdit2, FiTrash2, FiUserPlus, FiDownload } from "react-icons/fi";
 import { toast } from "react-toastify";
 import ConfirmationDialog from "./ConfirmationDialog";
 import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
@@ -25,6 +27,7 @@ const UserManagement = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [usersPerPage] = useState(10);
   const [selectedUsers, setSelectedUsers] = useState([]);
+  const [activityLogs, setActivityLogs] = useState([]);
 
   useEffect(() => {
     fetchUsersAndRoles();
@@ -87,10 +90,12 @@ const UserManagement = () => {
           )
         );
         toast.success("User updated successfully!");
+        logActivity(`Updated user: ${updatedUser.name}`);
       } else {
         const newUser = await api.createUser(formData);
         setUsers([...users, newUser]);
         toast.success("User created successfully!");
+        logActivity(`Created new user: ${newUser.name}`);
       }
       setShowModal(false);
     } catch (error) {
@@ -104,6 +109,7 @@ const UserManagement = () => {
       await api.deleteUser(userToDelete._id);
       setUsers(users.filter((user) => user._id !== userToDelete._id));
       toast.success("User deleted successfully!");
+      logActivity(`Deleted user: ${userToDelete.name}`);
       setShowConfirmation(false);
       setUserToDelete(null);
     } catch (error) {
@@ -142,6 +148,7 @@ const UserManagement = () => {
       await Promise.all(selectedUsers.map((userId) => api.deleteUser(userId)));
       setUsers(users.filter((user) => !selectedUsers.includes(user._id)));
       toast.success("Selected users deleted successfully!");
+      logActivity(`Deleted selected users`);
       setSelectedUsers([]);
     } catch (error) {
       console.error("Error deleting users:", error);
@@ -149,11 +156,33 @@ const UserManagement = () => {
     }
   };
 
-  const handleExport = () => {
-    const ws = XLSX.utils.json_to_sheet(users);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Users");
-    XLSX.writeFile(wb, "users.xlsx", { bookType: "xlsx", type: "binary" });
+  const handleExport = (format) => {
+    if (format === "excel") {
+      const ws = XLSX.utils.json_to_sheet(users);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Users");
+      XLSX.writeFile(wb, "users.xlsx", { bookType: "xlsx", type: "binary" });
+    } else if (format === "pdf") {
+      const doc = new jsPDF();
+      doc.autoTable({
+        head: [["Name", "Email", "Role", "Status", "Created At"]],
+        body: users.map((user) => [
+          user.name,
+          user.email,
+          user.role,
+          user.status,
+          new Date(user.createdAt).toLocaleDateString(),
+        ]),
+      });
+      doc.save("users.pdf");
+    }
+  };
+
+  const logActivity = (message) => {
+    setActivityLogs((prevLogs) => [
+      ...prevLogs,
+      { message, timestamp: new Date().toLocaleString() },
+    ]);
   };
 
   const indexOfLastUser = currentPage * usersPerPage;
@@ -193,10 +222,17 @@ const UserManagement = () => {
           )}
           <button
             className="flex items-center px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-            onClick={handleExport}
+            onClick={() => handleExport("excel")}
           >
             <FiDownload className="mr-2" />
             Export to Excel
+          </button>
+          <button
+            className="flex items-center px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+            onClick={() => handleExport("pdf")}
+          >
+            <FiDownload className="mr-2" />
+            Export to PDF
           </button>
         </div>
       </div>
@@ -311,6 +347,17 @@ const UserManagement = () => {
             ))}
           </ul>
         </nav>
+      </div>
+
+      <div className="bg-white p-6 rounded-lg shadow-lg mt-8">
+        <h2 className="text-xl font-bold mb-4">Activity Logs</h2>
+        <ul>
+          {activityLogs.map((log, index) => (
+            <li key={index} className="mb-2">
+              <span className="font-semibold">{log.timestamp}</span>: {log.message}
+            </li>
+          ))}
+        </ul>
       </div>
 
       <UserModal

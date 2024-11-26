@@ -3,6 +3,7 @@ import Layout from "./components/Layout";
 import Dashboard from "./components/Dashboard";
 import UserManagement from "./components/UserManagement";
 import RoleManagement from "./components/RoleManagement";
+import Profile from "./components/Profile";
 import { ToastContainer } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -26,6 +27,7 @@ const App = () => {
           <Route index element={<Dashboard />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="roles" element={<RoleManagement />} />
+          <Route path="profile" element={<Profile />} />
         </Route>
       </Routes>
     </BrowserRouter>

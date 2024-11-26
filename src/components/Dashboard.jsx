@@ -7,39 +7,44 @@ import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Toolti
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement);
 
 const Dashboard = () => {
-  const [users, setUsers] = useState([]);
-  const [roles, setRoles] = useState([]);
-  const [usersPerRole, setUsersPerRole] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState({
+    users: [],
+    roles: [],
+    usersPerRole: [],
+    loading: true,
+  });
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        setLoading(true);
+        setState((prevState) => ({ ...prevState, loading: true }));
         const [usersData, rolesData] = await Promise.all([
           api.getUsers(),
           api.getRoles(),
         ]);
-
-        setUsers(usersData);
-        setRoles(rolesData);
 
         const userRoleCounts = rolesData.map((role) => ({
           name: role.name,
           userCount: usersData.filter((user) => user.role === role.name).length,
         }));
 
-        setUsersPerRole(userRoleCounts);
+        setState({
+          users: usersData,
+          roles: rolesData,
+          usersPerRole: userRoleCounts,
+          loading: false,
+        });
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
-      } finally {
-        setLoading(false);
+        setState((prevState) => ({ ...prevState, loading: false }));
       }
     };
 
     fetchDashboardData();
   }, []);
+
+  const { users, roles, usersPerRole, loading } = state;
 
   const stats = [
     {

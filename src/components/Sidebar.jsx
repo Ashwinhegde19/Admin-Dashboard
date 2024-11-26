@@ -1,12 +1,14 @@
 import { NavLink } from "react-router-dom";
 import { LuLayoutDashboard, LuUsers, LuMenu, LuX } from "react-icons/lu";
 import { GoPasskeyFill } from "react-icons/go";
+import { useState } from "react";
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: <LuLayoutDashboard />, path: "/" },
     { id: "users", label: "Users", icon: <LuUsers />, path: "/users" },
     { id: "roles", label: "Roles", icon: <GoPasskeyFill />, path: "/roles" },
+    { id: "profile", label: "Profile", icon: <LuUsers />, path: "/profile" }, // Add profile link
   ];
 
   return (
